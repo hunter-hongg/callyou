@@ -5,7 +5,7 @@ import '../models.dart';
 import '../theme.dart';
 import '../widgets/ui.dart';
 
-enum VoiceReminderStatus { idle, requesting, playing, empty, ready, failed }
+enum VoiceReminderStatus { idle, requesting, playing, empty, failed }
 
 class IncomingCallOverlay extends StatefulWidget {
   const IncomingCallOverlay({
@@ -293,11 +293,6 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay> {
       VoiceReminderStatus.empty => (
         Icons.volume_off_outlined,
         AppColors.chalkSoft,
-        widget.voiceNote,
-      ),
-      VoiceReminderStatus.ready => (
-        Icons.volume_up_rounded,
-        AppColors.jadeOnBoard,
         widget.voiceNote,
       ),
       VoiceReminderStatus.failed => (

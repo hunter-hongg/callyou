@@ -112,9 +112,10 @@ void main() {
         fake.ttsRequests.any((text) => text.contains('李思思同学')),
         isTrue,
       );
-      expect(ttsPlayer.played, hasLength(2));
+      expect(ttsPlayer.rotations, isNotEmpty);
+      expect(_rotationIds(ttsPlayer), containsAll(['call-1', 'call-2']));
       expect(
-        find.text('语音提醒已播放完毕（8 字节）。'),
+        find.textContaining('语音提醒正在循环播放'),
         findsOneWidget,
       );
 
@@ -133,6 +134,8 @@ void main() {
 
       expect(fake.acknowledgeCount, 1);
       expect(find.text('老师正在呼叫你'), findsOneWidget);
+      // 被确认的那条立刻退出轮播，剩下那条继续循环。
+      expect(_rotationIds(ttsPlayer), hasLength(1));
 
       await tester.tap(find.text('收到了，马上回应').first);
       await _pumpNetwork(tester);
@@ -143,6 +146,8 @@ void main() {
       expect(find.text('老师正在呼叫你'), findsNothing);
       expect(find.text('2 条'), findsOneWidget);
       expect(fake.ttsRequests.length, ttsRequestsBefore);
+      // 全部确认后轮播列表清空，声音停止。
+      expect(ttsPlayer.rotations.last, isEmpty);
 
       await tester.pumpWidget(const SizedBox());
     },
@@ -160,6 +165,10 @@ Future<void> _pumpNetwork(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 120));
 }
+
+/// 伪播放器最后一次收到的轮播 ID 列表。
+List<String> _rotationIds(FakeTtsPlayer player) =>
+    player.rotations.last.map((item) => item.id).toList();
 
 class FakeClassroom {
   FakeClassroom({bool seedPendingCalls = false}) {
@@ -336,13 +345,14 @@ class FakeClassroom {
   }
 }
 
-/// 记录播放调用的伪播放器，不触碰真实音频硬件与平台通道。
+/// 记录轮播内容的伪播放器，不触碰真实音频硬件与平台通道。
 class FakeTtsPlayer implements TtsPlayer {
-  final List<Uint8List> played = [];
+  /// 每次 [setRotation] 收到的内容快照，最后一次即当前正在循环的列表。
+  final List<List<Announcement>> rotations = [];
 
   @override
-  Future<void> play(Uint8List audio, {String? contentType}) async {
-    played.add(audio);
+  Future<void> setRotation(List<Announcement> items) async {
+    rotations.add(List.of(items));
   }
 
   @override

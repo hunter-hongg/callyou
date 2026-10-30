@@ -46,11 +46,20 @@ class _StudentDashboardState extends State<StudentDashboard> {
   String _voiceNote = '';
   int _voiceRequestToken = 0;
   final List<CallRecord> _history = [];
+  final Map<String, Announcement> _announcements = {};
   TtsPlayer? _ttsPlayer;
 
   /// 懒创建播放器：没有呼叫进来、没有可播的音频时，不占用音频资源。
   TtsPlayer get _player =>
-      _ttsPlayer ??= widget.ttsPlayer ?? AudioTtsPlayer();
+      _ttsPlayer ??=
+      widget.ttsPlayer ?? AudioTtsPlayer(onPlayError: _reportPlayError);
+
+  /// 当前待回应呼叫的语音，按呼叫顺序——这就是播放器的轮播内容。
+  List<Announcement> get _rotation =>
+      _pendingCalls
+          .map((call) => _announcements[call.id])
+          .whereType<Announcement>()
+          .toList();
 
   @override
   void initState() {
@@ -79,6 +88,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
 
       final pendingIds = calls.map((call) => call.id).toSet();
       _alertedCallIds.removeWhere((id) => !pendingIds.contains(id));
+      // 已经不待回应的呼叫（包括被老师那边消掉的）不再占着轮播列表。
+      _announcements.removeWhere((id, _) => !pendingIds.contains(id));
       final newCalls = calls
           .where((call) => !_alertedCallIds.contains(call.id))
           .toList();
@@ -98,6 +109,10 @@ class _StudentDashboardState extends State<StudentDashboard> {
           _voiceNote = '正在调用后端语音接口…';
         }
       });
+
+      // 待回应列表可能变化（别的端确认了、呼叫过期了）；内容等价时重复设置
+      // 不会打断正在播的片段。
+      _refreshRotation();
 
       if (newCalls.isNotEmpty) {
         unawaited(_playAlertSound());
@@ -149,33 +164,21 @@ class _StudentDashboardState extends State<StudentDashboard> {
       }
       if (result.hasAudio) {
         final audio = result.audio;
+        _announcements[call.id] = Announcement(
+          id: call.id,
+          audio: audio,
+          contentType: result.contentType,
+        );
         if (token == _voiceRequestToken) {
           setState(() {
             _voiceStatus = VoiceReminderStatus.playing;
-            _voiceNote = '语音提醒正在播放（${audio.length} 字节）…';
+            _voiceNote = '语音提醒正在循环播放（${audio.length} 字节），'
+                '点「收到了，马上回应」后停止。';
           });
         }
-        // play 返回的 Future 在这个片段播完时才完成；多个片段按先进先出
-        // 依次念完，不会互相打断。结果只在这个请求仍是最新时更新界面。
-        unawaited(
-          _player.play(audio, contentType: result.contentType).then(
-                (_) {
-                  if (!mounted || token != _voiceRequestToken) return;
-                  setState(() {
-                    _voiceStatus = VoiceReminderStatus.ready;
-                    _voiceNote =
-                        '语音提醒已播放完毕（${audio.length} 字节）。';
-                  });
-                },
-                onError: (Object error, StackTrace stackTrace) {
-                  if (!mounted || token != _voiceRequestToken) return;
-                  setState(() {
-                    _voiceStatus = VoiceReminderStatus.failed;
-                    _voiceNote = '音频播放失败，可点「重试」重新合成播放。';
-                  });
-                },
-              ),
-        );
+        // 合成好的音频进入轮播列表：按待回应呼叫的顺序依次念，念完一轮
+        // 再从头开始，直到这条呼叫被确认。窗口失焦或收进托盘都照常播。
+        unawaited(_player.setRotation(_rotation));
       } else if (token == _voiceRequestToken) {
         setState(() {
           _voiceStatus = VoiceReminderStatus.empty;
@@ -203,6 +206,24 @@ class _StudentDashboardState extends State<StudentDashboard> {
         _voiceNote = '语音接口请求失败，可稍后重试。';
       });
     }
+  }
+
+  /// 重新对齐轮播内容。播放器还没创建时什么都不用做——那时没有声音在播。
+  void _refreshRotation() {
+    final player = _ttsPlayer;
+    if (player == null) return;
+    unawaited(player.setRotation(_rotation));
+  }
+
+  void _reportPlayError(Object _) {
+    if (!mounted) return;
+    // 播放器已经停掉了轮播；把已合成的语音一起丢掉，免得下一次轮询又把它
+    // 重新塞回去，界面显示「失败」而声音在重试。
+    _announcements.clear();
+    setState(() {
+      _voiceStatus = VoiceReminderStatus.failed;
+      _voiceNote = '音频播放失败，可点「重试」重新合成播放。';
+    });
   }
 
   void _retryVoice() {
@@ -233,11 +254,14 @@ class _StudentDashboardState extends State<StudentDashboard> {
             .toList();
         _alertedCallIds.remove(acknowledged.id);
         _acknowledgingIds.remove(acknowledged.id);
+        _announcements.remove(acknowledged.id);
         if (_pendingCalls.isEmpty) {
           _voiceStatus = VoiceReminderStatus.idle;
           _voiceNote = '';
         }
       });
+      // 被确认的这条立刻退出轮播；全部确认完时列表为空，声音停止。
+      _refreshRotation();
       showAppSnackBar(context, '已回应 ${acknowledged.studentName} 的呼叫');
       unawaited(_poll());
     } on ApiException catch (error) {
@@ -557,7 +581,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '收到呼叫时自动调用并播放课堂后端的语音提醒；接口返回空音频时，文字提醒照常显示。',
+                  '收到呼叫时自动合成并循环播放语音提醒，确认后才停止；窗口最小化或收进系统托盘时同样播放。接口返回空音频时，文字提醒照常显示。',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: AppColors.inkSoft,
                   ),

@@ -126,10 +126,20 @@ class CallReminderService : Service() {
         }
         createChannel()
         val notification = buildNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, TYPE_MEDIA_PLAYBACK)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, TYPE_MEDIA_PLAYBACK)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (error: Exception) {
+            // ROM 上的 mediaPlayback 校验、或通知权限被拒，都可能把带类型的
+            // startForeground 顶回来。退回不带类型的写法：通知可能不显示，
+            // 但应用绝不能因为提醒起不来而崩掉。
+            try {
+                startForeground(NOTIFICATION_ID, notification)
+            } catch (ignored: Exception) {
+            }
         }
     }
 

@@ -9,7 +9,27 @@ env:
   API_BASE_URL: http://8.133.195.35:40128
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - run: flutter analyze
+
+      - run: flutter test
+
   android:
+    needs: check
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -37,6 +57,7 @@ jobs:
           path: frontend/build/app/outputs/flutter-apk/app-release.apk
 
   windows:
+    needs: check
     runs-on: windows-latest
     defaults:
       run:

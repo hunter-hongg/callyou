@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../device_wording.dart';
 import '../theme.dart';
 import '../widgets/ui.dart';
 import 'role_selection_page.dart';
@@ -227,7 +228,7 @@ class _LoginPageState extends State<LoginPage> {
             Text('登录课堂', style: textTheme.displaySmall),
             const SizedBox(height: 8),
             Text(
-              '教师端与学生端共用一个课堂账号，登录后再选择这台电脑的身份。',
+              '教师端与学生端共用一个课堂账号，登录后再选择身份。',
               style: textTheme.bodyMedium?.copyWith(color: AppColors.muted),
             ),
             const SizedBox(height: 26),
@@ -375,7 +376,7 @@ class _LoginPageState extends State<LoginPage> {
             ),
             const SizedBox(height: 16),
             Text(
-              '演示账号已预填：callyou / 123456。教师和学生电脑请使用同一账号登录。',
+              classroomDeviceLoginHint,
               style: textTheme.bodySmall?.copyWith(color: AppColors.muted),
             ),
             const SizedBox(height: 12),

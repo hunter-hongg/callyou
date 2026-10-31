@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../android_tts_player.dart';
 import '../api_client.dart';
+import '../call_reminder.dart';
+import '../device_wording.dart';
 import '../format.dart';
 import '../models.dart';
 import '../theme.dart';
@@ -33,6 +36,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
   static const _pollInterval = Duration(seconds: 2);
 
   Timer? _pollTimer;
+  AppLifecycleListener? _lifecycle;
+  bool _reminderActive = false;
   bool _pollInFlight = false;
   bool _connected = false;
   String? _connectionError;
@@ -50,9 +55,11 @@ class _StudentDashboardState extends State<StudentDashboard> {
   TtsPlayer? _ttsPlayer;
 
   /// 懒创建播放器：没有呼叫进来、没有可播的音频时，不占用音频资源。
+  /// Android 正式版拿到的是 [AndroidTtsPlayer]，语音会同步给前台服务。
   TtsPlayer get _player =>
       _ttsPlayer ??=
-      widget.ttsPlayer ?? AudioTtsPlayer(onPlayError: _reportPlayError);
+      widget.ttsPlayer ??
+      createDefaultTtsPlayer(onPlayError: _reportPlayError);
 
   /// 当前待回应呼叫的语音，按呼叫顺序——这就是播放器的轮播内容。
   List<Announcement> get _rotation =>
@@ -68,11 +75,42 @@ class _StudentDashboardState extends State<StudentDashboard> {
     _pollTimer = Timer.periodic(_pollInterval, (_) {
       unawaited(_poll());
     });
+    _startReminder();
+    // 只认 onPause/onResume：Android 上弹权限框、下拉通知栏都会触发
+    // onInactive，那时不该把声音掐掉。
+    _lifecycle = AppLifecycleListener(
+      onPause: _sendAlertToBackground,
+      onResume: _bringAlertToForeground,
+    );
+  }
+
+  /// Android：常驻通知让进程保持前台优先级，后台轮询和播报才不会被掐掉。
+  void _startReminder() {
+    if (!CallReminder.isSupported) return;
+    unawaited(
+      CallReminder.start().then((started) {
+        if (!mounted) return;
+        _reminderActive = started;
+        if (started) unawaited(_syncReminderStatus());
+      }),
+    );
+  }
+
+  void _sendAlertToBackground() {
+    final player = _ttsPlayer;
+    if (player is AndroidTtsPlayer) unawaited(player.sendToBackground());
+  }
+
+  void _bringAlertToForeground() {
+    final player = _ttsPlayer;
+    if (player is AndroidTtsPlayer) unawaited(player.resumeInForeground());
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _lifecycle?.dispose();
+    if (_reminderActive) unawaited(CallReminder.stop());
     // 注入的播放器归调用方管理，这里只释放自己创建的那一个。
     if (widget.ttsPlayer == null) unawaited(_ttsPlayer?.dispose());
     super.dispose();
@@ -113,6 +151,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
       // 待回应列表可能变化（别的端确认了、呼叫过期了）；内容等价时重复设置
       // 不会打断正在播的片段。
       _refreshRotation();
+      unawaited(_syncReminderStatus());
 
       if (newCalls.isNotEmpty) {
         unawaited(_playAlertSound());
@@ -224,6 +263,17 @@ class _StudentDashboardState extends State<StudentDashboard> {
       _voiceStatus = VoiceReminderStatus.failed;
       _voiceNote = '音频播放失败，可点「重试」重新合成播放。';
     });
+  }
+
+  /// 通知栏只写一行字：待回应几条、正在念谁。
+  Future<void> _syncReminderStatus() async {
+    if (!_reminderActive) return;
+    final pending = _pendingCalls;
+    await CallReminder.setStatus(
+      pending.isEmpty
+          ? '正在等待新呼叫'
+          : '${pending.length} 条待回应 · ${pending.first.studentName}',
+    );
   }
 
   void _retryVoice() {
@@ -468,6 +518,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
             child: Text(
               connected
                   ? '后台每 2 秒检查一次本账号的新呼叫，来了就会全屏弹出。'
+                    '${_reminderActive ? '退到后台时提醒会挂在通知栏继续播报。' : ''}'
                   : _connectionError!,
               textAlign: TextAlign.center,
               style: textTheme.bodyMedium?.copyWith(
@@ -581,7 +632,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '收到呼叫时自动合成并循环播放语音提醒，确认后才停止；窗口最小化或收进系统托盘时同样播放。接口返回空音频时，文字提醒照常显示。',
+                  '收到呼叫时自动合成并循环播放语音提醒，确认后才停止；$backgroundPlaybackNote接口返回空音频时，文字提醒照常显示。',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: AppColors.inkSoft,
                   ),

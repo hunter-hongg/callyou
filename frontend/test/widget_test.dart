@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:callyou/api_client.dart';
+import 'package:callyou/device_wording.dart';
 import 'package:callyou/main.dart';
 import 'package:callyou/models.dart';
 import 'package:callyou/screens/student_dashboard.dart';
@@ -43,7 +44,7 @@ void main() {
     await _pumpNetwork(tester);
     await tester.pump(const Duration(milliseconds: 320));
 
-    expect(find.text('选择这台电脑的身份'), findsOneWidget);
+    expect(find.text(roleSelectionTitle), findsOneWidget);
 
     await tester.tap(find.text('教师端'));
     await tester.pump();

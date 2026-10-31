@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'api_client.dart';
 import 'desktop_tray.dart';
+import 'device_wording.dart';
 import 'screens/login_page.dart';
 import 'theme.dart';
 
@@ -9,7 +10,8 @@ const _appTitle = 'CallYou 课堂';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await installDesktopTray(title: _appTitle);
+  // 系统托盘只有桌面三件套上有；手机上这个调用只会白跑一趟插件通道。
+  if (!isMobileDevice) await installDesktopTray(title: _appTitle);
   runApp(CallYouApp(api: ApiClient()));
 }
 

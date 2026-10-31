@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../device_wording.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets/ui.dart';
@@ -88,10 +89,10 @@ class _RoleSelectionPageState extends State<RoleSelectionPage> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               const SizedBox(height: 30),
-                              Text('选择这台电脑的身份', style: textTheme.displaySmall),
+                              Text(roleSelectionTitle, style: textTheme.displaySmall),
                               const SizedBox(height: 8),
                               Text(
-                                '教师端发起呼叫，学生端统一接收账号下的所有呼叫。这台电脑只扮演其中一个角色。',
+                                roleSelectionIntro,
                                 style: textTheme.bodyMedium?.copyWith(
                                   color: AppColors.muted,
                                 ),
@@ -102,7 +103,7 @@ class _RoleSelectionPageState extends State<RoleSelectionPage> {
                                   final cards = [
                                     _RoleCard(
                                       title: '教师端',
-                                      description: '讲台电脑：从座次表点一位学生，写下说明并呼叫。',
+                                      description: teacherRoleDescription,
                                       icon: Icons.co_present_rounded,
                                       accent: AppColors.redPen,
                                       motif: const _RoleMotif(
@@ -114,7 +115,7 @@ class _RoleSelectionPageState extends State<RoleSelectionPage> {
                                         '选择学生并发起即时呼叫',
                                         '实时查看「待回应 / 已确认」',
                                       ],
-                                      footerLabel: '讲台电脑',
+                                      footerLabel: teacherFooterLabel,
                                       selected:
                                           _selectedRole == EntryRole.teacher,
                                       onTap: () {
@@ -126,7 +127,7 @@ class _RoleSelectionPageState extends State<RoleSelectionPage> {
                                     ),
                                     _RoleCard(
                                       title: '学生端',
-                                      description: '学生电脑或班级大屏：接收本账号的全部呼叫。',
+                                      description: studentRoleDescription,
                                       icon: Icons.school_rounded,
                                       accent: AppColors.jade,
                                       motif: const _RoleMotif(
@@ -140,7 +141,7 @@ class _RoleSelectionPageState extends State<RoleSelectionPage> {
                                         '每 2 秒自动检查新呼叫',
                                         '接收提醒并自动播放语音',
                                       ],
-                                      footerLabel: '学生电脑 / 班级大屏',
+                                      footerLabel: studentFooterLabel,
                                       selected:
                                           _selectedRole == EntryRole.student,
                                       onTap: () {

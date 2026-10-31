@@ -34,3 +34,6 @@ backend/backend
 
 # OS
 .DS_Store
+
+# 下载下来的 CI 产物
+/dist/
